@@ -1,0 +1,42 @@
+val tasks = mutableListOf(mutableListOf<String>())
+
+fun main() {
+    startMenu()
+}
+
+fun startMenu() {
+    while (true) {
+        val input = "Input an action (add, print, end):".toInput()
+        when (input) {
+            "end" -> println("Tasklist exiting!").let { return }
+            "add" -> inputTasks()
+            "print" -> outputTasks()
+            else -> println("The input action is invalid")
+        }
+    }
+
+}
+
+fun inputTasks() {
+    val lst = mutableListOf<String>()
+    "Input a new task (enter a blank line to end):".toInput()
+        .let { if (it.isEmpty()) println("The task is blank").run { return } else lst.add(it) }
+    while (true) {
+        val task = readln().trim()
+        if (task.isEmpty()) break else lst.add(task)
+    }
+    tasks.add(lst)
+}
+
+fun outputTasks() {
+    if (tasks.isEmpty()) println("No tasks have been input").run { return }
+    for (i in tasks.indices) {
+        for (j in tasks[i].indices) {
+            println(if (j == 0) "${String.format("%-2s", i)} ${tasks[i][j]}" else
+                    String.format("%${tasks[i][j].length + 3}s", tasks[i][j]))
+        }
+        println()
+    }
+}
+
+fun String.toInput() = println(this).run { readln().trim().lowercase() }
