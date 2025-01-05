@@ -1,0 +1,108 @@
+import kotlinx.datetime.LocalDate
+
+fun main() {
+    startMenu()
+}
+
+fun startMenu() {
+    while (true) {
+        val input = "Input an action (add, print, end):".toInput()
+        when (input) {
+            "END" -> println("Tasklist exiting!").let { return }
+            "ADD" -> Action.addTask()
+            "PRINT" -> Action.printTasks()
+            else -> println("The input action is invalid")
+        }
+    }
+}
+
+object Action {
+
+    private val tasks = mutableListOf<Task>()
+
+    //обработка вводимой задачи и помещение ее данных (приоритет, дата, время, список подзадач и порядковый номер) в список дел
+    fun addTask() {
+        val phrases =
+            arrayOf("Input the task priority (C, H, N, L):", "Input the date (yyyy-mm-dd):", "Input the time (hh:mm):")
+        val arguments = Array(3) { "" }
+        for (i in phrases.indices) {
+            arguments[i] = Check().inputProcess(phrases[i], i)
+        }
+        val lst = mutableListOf<String>()
+        println("Input a new task (enter a blank line to end):").run { readln().trim() }
+            .let { if (it.isEmpty()) println("The task is blank").run { return } else lst.add(it) }
+        while (true) {
+            val task = readln().trim()
+            if (task.isEmpty()) break else lst.add(task)
+        }
+        tasks.add(Task(id = tasks.size + 1, text = lst, priority = arguments[0], date = arguments[1], time = arguments[2]))
+    }
+
+    //распечатывание списка задач
+    fun printTasks() =
+        if (tasks.isEmpty()) println("No tasks have been input").run { return } else tasks.forEach { print(it) }
+
+}
+
+//класс проверки вводимых приоритета, даты и времени
+class Check {
+
+    //обработка вводимых приоритета, даты и времени (пока не будут введены валидные)
+    fun inputProcess(input: String, index: Int): String {
+        while (true) {
+            val str = input.toInput()
+            when (index) {
+                0 -> if (checkPriority(str)) return str
+                1 -> if (checkDate(str)) return str.split("-").convertToDateTime() else println("The input date is invalid")
+                else -> if (checkTime(str)) return str.split(":")
+                    .convertToDateTime() else println("The input time is invalid")
+            }
+        }
+    }
+
+    //проверка приоритета на валидность
+    private fun checkPriority(input: String): Boolean = arrayOf("C", "H", "N", "L").contains(input)
+
+    //проверка даты на валидность
+    private fun checkDate(input: String): Boolean {
+        val lst = input.let { if (!it.matches("\\d\\d\\d\\d-\\d\\d?-\\d\\d?".toRegex())) return false else it.split("-") }
+            .map { it.toInt() }
+        try {
+            LocalDate(lst[0], lst[1], lst[2])
+        } catch (e: IllegalArgumentException) {
+            return false
+        }
+        return true
+    }
+
+    //проверка веремени на валидность
+    private fun checkTime(input: String): Boolean = input.split(":")
+        .let {
+            it.size == 2 && it[0].matches("\\d\\d?".toRegex()) && it[1].matches("\\d\\d?".toRegex()) &&
+                    it[0].toInt() in 0..23 && it[1].toInt() in 0..59
+        }
+}
+
+//присваивание и форматирование пользователького ввода в ответ на строку запроса
+fun String.toInput() = println(this).run { readln().trim().uppercase() }
+
+//конвертация даты или времени в строку с ведущими нулями (2020-2-10 -> 2020-02-10)
+fun List<String>.convertToDateTime(): String = this.joinToString(if (this.size == 2 ) ":" else "-") {
+    if (it.length <= 2) String.format("%02d", it.toInt()) else String.format("%04d", it.toInt()) }
+
+data class Task(
+    val id: Int,
+    val text: List<String>,
+    val priority: String,
+    val date: String,
+    val time: String
+) {
+    override fun toString(): String {
+        return buildString {
+            append("${String.format("%-2s", id)} $date $time $priority\n")
+            for (str in text) {
+                append("${String.format("%${str.length + 3}s", str)}\n")
+            }
+        }
+    }
+}
