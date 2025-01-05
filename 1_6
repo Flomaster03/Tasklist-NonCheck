@@ -1,0 +1,18 @@
+val tasks = mutableListOf<String>()
+
+fun main() {
+    inputTasks()
+    outputTasks()
+}
+
+fun inputTasks() {
+    println("Input the tasks (enter a blank line to end):")
+    while (true) {
+        readln().trim().let { if (it.isEmpty()) return else tasks.add(it) }
+    }
+}
+
+fun outputTasks() {
+    if (tasks.isEmpty()) println("No tasks have been input").run { return }
+    tasks.forEachIndexed { i, s -> println("${String.format("%-2s", i + 1)} $s") }
+}
