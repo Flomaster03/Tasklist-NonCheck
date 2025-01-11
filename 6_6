@@ -1,0 +1,304 @@
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.datetime.*
+import java.io.File
+
+fun main() {
+    if (Data.file.exists()) downloadFromFile()
+    startMenu()
+}
+
+//выгрузка списка задач из файла
+fun downloadFromFile() = Data.tasks.addAll(ConvertData().tasksFromJSON(Data.file.readText()))
+
+//сохранение списка задач в файле
+fun downloadToFile() = Data.file.writeText(ConvertData().tasksToJson(Data.tasks))
+
+fun startMenu() {
+    while (true) {
+        when (val input = "Input an action (add, print, edit, delete, end):".toInput()) {
+            "END" -> println("Tasklist exiting!").run { downloadToFile() }.let { return }
+            "ADD" -> Action().addTask()
+            "DELETE" -> Action().processDeleteEdit(input)
+            "EDIT" -> Action().processDeleteEdit(input)
+            "PRINT" -> Action().printTasks()
+            else -> println("The input action is invalid")
+        }
+    }
+}
+
+//обработка действий с задачами (CRUD)
+class Action {
+    private val phrases =
+        arrayOf(
+            "Input the task priority (C, H, N, L):",
+            "Input the date (yyyy-mm-dd):",
+            "Input the time (hh:mm):",
+            "Input a new task (enter a blank line to end):"
+        )
+    private val fields = arrayOf("PRIORITY", "DATE", "TIME", "TASK")
+
+    //обработка вводимой задачи и помещение ее данных (приоритет, дата, время, список подзадач и порядковый номер) в список дел
+    fun addTask() {
+        val arguments = Array(3) { Check().processPriorityDateTime(phrases[it], fields[it]) }
+        val lstSubtasks = Check().processSubtasks(phrases[3])
+        if (lstSubtasks.isEmpty()) return
+        Data.tasks.add(
+            Task(
+                id = Data.tasks.size + 1,
+                subtasks = lstSubtasks,
+                priority = arguments[0],
+                date = arguments[1],
+                time = arguments[2]
+            )
+        )
+    }
+
+    //обработка общего начала для удаления и редактирования
+    fun processDeleteEdit(action: String) {
+        printTasks()
+        if (Data.tasks.isNotEmpty()) {
+            val taskId = Check().processTaskID(Data.tasks.size)
+            if (action == "DELETE") deleteTask(taskId - 1) else editTask(taskId - 1)
+        }
+    }
+
+    //удаление задачи с изменением id оставшихся после этого
+    private fun deleteTask(index: Int) {
+        Data.tasks.removeAt(index)
+        for (i in index until Data.tasks.size) {
+            Data.tasks[i] = Data.tasks[i].copy(id = i + 1)
+        }
+        println("The task is deleted")
+    }
+
+    //редактирование полей задачи
+    private fun editTask(index: Int) {
+        while (true) {
+
+            when (val taskField = "Input a field to edit (priority, date, time, task):".toInput()) {
+                "PRIORITY" -> {
+                    Data.tasks[index] = Data.tasks[index].copy(priority = Check().processPriorityDateTime(phrases[0], taskField))
+                    break
+                }
+
+                "DATE" -> {
+                    Data.tasks[index] = Data.tasks[index].copy(date = Check().processPriorityDateTime(phrases[1], taskField))
+                    break
+                }
+
+                "TIME" -> {
+                    Data.tasks[index] = Data.tasks[index].copy(time = Check().processPriorityDateTime(phrases[2], taskField))
+                    break
+                }
+
+                "TASK" -> {
+                    val lstSubtasks = Check().processSubtasks(phrases[3])
+                    if (lstSubtasks.isEmpty()) return else {
+                        Data.tasks[index] = Data.tasks[index].copy(subtasks = lstSubtasks)
+                        break
+                    }
+                }
+
+                else -> {
+                    println("Invalid field")
+                    continue
+                }
+            }
+        }
+        println("The task is changed")
+    }
+
+    //распечатывание списка задач
+    fun printTasks() =
+        if (Data.tasks.isEmpty()) println("No tasks have been input").run { return } else Output().printOutput()
+
+}
+
+//класс проверки вводимых данных
+class Check {
+
+    //обработка вводимых приоритета, даты и времени (пока не будут введены валидные)
+    fun processPriorityDateTime(phrase: String, taskField: String): String {
+        while (true) {
+            val str = phrase.toInput()
+            when (taskField) {
+                "PRIORITY" -> {
+                    if (checkPriority(str)) return when (str) {
+                        "C" -> Color.RED.code
+                        "H" -> Color.YELLOW.code
+                        "N" -> Color.GREEN.code
+                        else -> Color.BLUE.code
+                    }
+                }
+
+                "DATE" -> if (checkDate(str)) return str.split("-")
+                    .convertToDateTime() else println("The input date is invalid")
+
+                "TIME" -> if (checkTime(str)) return str.split(":")
+                    .convertToDateTime() else println("The input time is invalid")
+            }
+        }
+    }
+
+    //конвертация даты или времени в строку с ведущими нулями (2020-2-10 -> 2020-02-10)
+    private fun List<String>.convertToDateTime(): String = this.joinToString(if (this.size == 2) ":" else "-") {
+        if (it.length <= 2) String.format("%02d", it.toInt()) else String.format("%04d", it.toInt())
+    }
+
+    //обработка вводимого списка подзадач
+    fun processSubtasks(phrase: String): MutableList<String> {
+        val lstSubtasks = mutableListOf<String>()
+        println(phrase).run { readln().trim() }.let {
+            if (it.isEmpty()) println("The task is blank").run { return lstSubtasks } else lstSubtasks.add(it)
+        }
+        while (true) {
+            val task = readln().trim()
+            if (task.isEmpty()) break else lstSubtasks.add(task)
+        }
+        return lstSubtasks
+    }
+
+    //обработка дедлайна
+    fun processDeadline(date: String): String {
+        val taskDate = date.split("-").map { it.toInt() }.let { LocalDate(it[0], it[1], it[2]) }
+        val currentDate = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        val difference = currentDate.daysUntil(taskDate)
+        return when {
+            difference == 0 -> Color.YELLOW.code
+            difference > 0 -> Color.GREEN.code
+            else -> Color.RED.code
+        }
+    }
+
+    //проверка приоритета на валидность
+    private fun checkPriority(input: String): Boolean = arrayOf("C", "H", "N", "L").contains(input)
+
+    //проверка даты на валидность
+    private fun checkDate(input: String): Boolean {
+        val lst =
+            input.let { if (!it.matches("\\d\\d\\d\\d-\\d\\d?-\\d\\d?".toRegex())) return false else it.split("-") }
+                .map { it.toInt() }
+        try {
+            LocalDate(lst[0], lst[1], lst[2])
+        } catch (e: IllegalArgumentException) {
+            return false
+        }
+        return true
+    }
+
+    //проверка времени на валидность
+    private fun checkTime(input: String): Boolean = input.split(":").let {
+        it.size == 2 && it[0].matches("\\d\\d?".toRegex()) && it[1].matches("\\d\\d?".toRegex()) &&
+                it[0].toInt() in 0..23 && it[1].toInt() in 0..59
+    }
+
+    //обработка вводимого номера для удаления задачи
+    fun processTaskID(size: Int): Int {
+        while (true) {
+            val str = "\nInput the task number (1-$size):".toInput()
+            if (str.matches("\\d+".toRegex()) && str.toInt() in 1..size) return str.toInt() else
+                println("Invalid task number")
+        }
+    }
+}
+
+//вывод на печать
+class Output {
+    private val patternTextStart =
+        "%1s %-2s %1s %10s %1s %5s %1s %1s %1s %1s %1s" //шаблон первой части, содержащей слова (все столбцы, кроме Task)
+    private val patternTextEnd = "%-44s%1s" //шаблон втрой части, содержащей слова (столбец Task)
+    private val border = fillSymbolsStart('+', '-') + fillBorderEnd() //горизонтальная граница
+    private val heading = patternTextStart.format("|", "N", "|", "   Date   ", "|", "Time ", "|", "P", "|", "D", "|") +
+            patternTextEnd.format("%23s".format("Task"), "|") //строка заголовка таблицы
+
+    //входная точка вывода списка задач на печать
+    fun printOutput() {
+        println("$border\n$heading\n$border")
+        Data.tasks.forEach { printTask(it) }
+        println(border)
+    }
+
+    //формирование строки, состоящей из однотипных символов (горизонт. граница с узлами +-----+ или вертик. граница с пустым местом |     |)
+    private fun fillSymbolsStart(node: Char, infill: Char): String {
+        val repeats = arrayOf(4, 12, 7, 3, 3)
+        return buildString {
+            repeat(5) {
+                append(node)
+                repeat(repeats[it]) { append(infill) }
+            }
+            append(node)
+        }
+    }
+
+    //формирование окончания горизонтальной границы
+    private fun fillBorderEnd() = buildString {
+        repeat(44) { append('-') }
+        append('+')
+    }
+
+    //конвертация для разбивки одной строки, чья длина превышает 44 символа, на несколько строк и формирование листа из всех подстрок
+    private fun List<String>.convertList(): List<String> = this.map { it.chunked(44) }.flatten()
+
+    //печать каждой задачи: в первой строке все данные задачи, затем столбцы с данными пустые, печатаются подзадачи
+    private fun printTask(task: Task) {
+        val subtasks = task.subtasks.convertList()
+        val deadline = Check().processDeadline(task.date) //вычисление дедлайна
+        for (i in subtasks.indices) {
+            println(
+                (if (i == 0) patternTextStart.format(
+                    "|",
+                    task.id,
+                    "|",
+                    task.date,
+                    "|",
+                    task.time,
+                    "|",
+                    task.priority,
+                    "|",
+                    deadline,
+                    "|"
+                )
+                else fillSymbolsStart('|', ' ')) + patternTextEnd.format(subtasks[i], "|")
+            )
+        }
+    }
+}
+
+//конвертация списка задач в JSON и обратно
+class ConvertData {
+    private val moshi = Moshi.Builder()
+        .add(KotlinJsonAdapterFactory())
+        .build()
+    private val type = Types.newParameterizedType(List::class.java, Task::class.java)
+    private val tasksListAdapter = moshi.adapter<List<Task?>>(type)
+
+    fun tasksFromJSON(str: String): List<Task> = if (str.isEmpty()) emptyList<Task>() else tasksListAdapter.fromJson(str) as List<Task>
+
+    fun tasksToJson(lst: List<Task>): String = if (lst.isEmpty()) "" else tasksListAdapter.toJson(lst)
+}
+
+
+//присваивание и форматирование пользователького ввода в ответ на строку запроса
+fun String.toInput() = println(this).run { readln().trim().uppercase() }
+
+object Data {
+    val tasks = mutableListOf<Task>()
+    val file = File("tasklist.json")
+}
+
+data class Task(
+    val id: Int,
+    val date: String,
+    val time: String,
+    val priority: String,
+    val subtasks: List<String>
+)
+
+enum class Color(val code: String) {
+    RED("\u001B[101m \u001B[0m"),
+    YELLOW("\u001B[103m \u001B[0m"),
+    GREEN("\u001B[102m \u001B[0m"),
+    BLUE("\u001B[104m \u001B[0m");
+}
