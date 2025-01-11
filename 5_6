@@ -85,8 +85,11 @@ object Action {
                 }
 
                 "TASK" -> {
-                    tasks[index] = tasks[index].copy(subtasks = Check().processSubtasks(phrases[3]))
-                    break
+                    val lstSubtasks = Check().processSubtasks(phrases[3])
+                    if (lstSubtasks.isEmpty()) return else {
+                        tasks[index] = tasks[index].copy(subtasks = lstSubtasks)
+                        break
+                    }
                 }
 
                 else -> {
